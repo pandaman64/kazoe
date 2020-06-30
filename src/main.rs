@@ -1,4 +1,5 @@
 use flate2::read::ZlibDecoder;
+use git2::{ObjectType, Repository};
 use gumdrop::Options;
 use log::{error, info};
 use std::fs::File;
@@ -9,14 +10,14 @@ use walkdir::WalkDir;
 #[derive(Debug, Options)]
 struct Walk {
     #[options(free)]
-    path: PathBuf,
+    path: Option<PathBuf>,
     verbose: bool,
 }
 
 #[derive(Debug, Options)]
 struct Libgit {
     #[options(free)]
-    path: PathBuf,
+    path: Option<PathBuf>,
     verbose: bool,
 }
 
@@ -102,14 +103,59 @@ fn walk_objects(path: &Path) -> Counts {
     }
 }
 
+// enumerate objects using libgit
+fn foreach_objects(path: &Path) -> Counts {
+    let mut blob = 0;
+    let mut tree = 0;
+    let mut commit = 0;
+    let mut tag = 0;
+
+    let repo = Repository::discover(path).unwrap();
+    let odb = repo.odb().unwrap();
+    odb.foreach(|oid| {
+        match match odb.read_header(*oid) {
+            Ok(oid) => oid,
+            Err(e) => {
+                error!("failed to read header {:?}", e);
+                return true;
+            }
+        }
+        .1
+        {
+            ObjectType::Blob => blob += 1,
+            ObjectType::Tree => tree += 1,
+            ObjectType::Commit => commit += 1,
+            ObjectType::Tag => tag += 1,
+            ObjectType::Any => error!("encountered any object"),
+        }
+        true
+    })
+    .unwrap();
+
+    Counts {
+        blob,
+        tree,
+        commit,
+        tag,
+    }
+}
+
 fn main() {
     let opt = Opt::parse_args_default_or_exit();
     let counts = match opt {
-        Opt::Libgit(Libgit { path, verbose }) => todo!(),
-        Opt::Walk(Walk { mut path, verbose }) => {
+        Opt::Libgit(Libgit { path, verbose }) => {
             if verbose {
                 env_logger::init();
             }
+
+            let path = path.unwrap_or_else(|| ".".into());
+            foreach_objects(&path)
+        }
+        Opt::Walk(Walk { path, verbose }) => {
+            if verbose {
+                env_logger::init();
+            }
+            let mut path = path.unwrap_or_else(|| ".".into());
             path.push(".git");
             path.push("objects");
 

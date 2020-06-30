@@ -12,3 +12,4 @@ walkdir = "2.3.1"
 flate2 = "1.0.14"
 log = "0.4.8"
 env_logger = "0.7.1"
+git2 = { version = "0.13.6", default-features = false }
