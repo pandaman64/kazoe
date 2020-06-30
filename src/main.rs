@@ -7,10 +7,23 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 #[derive(Debug, Options)]
-struct Opt {
+struct Walk {
     #[options(free)]
     path: PathBuf,
     verbose: bool,
+}
+
+#[derive(Debug, Options)]
+struct Libgit {
+    #[options(free)]
+    path: PathBuf,
+    verbose: bool,
+}
+
+#[derive(Debug, Options)]
+enum Opt {
+    Walk(Walk),
+    Libgit(Libgit),
 }
 
 #[derive(Debug)]
@@ -21,7 +34,7 @@ struct Counts {
     tag: usize,
 }
 
-fn count_loose_objects(path: &Path) -> Counts {
+fn walk_objects(path: &Path) -> Counts {
     let mut blob = 0;
     let mut tree = 0;
     let mut commit = 0;
@@ -58,7 +71,7 @@ fn count_loose_objects(path: &Path) -> Counts {
                                     continue;
                                 }
                             };
-                            println!("{}", String::from_utf8_lossy(&content[0..header_end]));
+                            info!("{}", String::from_utf8_lossy(&content[0..header_end]));
 
                             if content.starts_with(b"blob") {
                                 blob += 1;
@@ -90,13 +103,21 @@ fn count_loose_objects(path: &Path) -> Counts {
 }
 
 fn main() {
-    let mut opts = Opt::parse_args_default_or_exit();
-    if opts.verbose {
-        env_logger::init();
-    }
-    info!("{:?}", opts);
-    opts.path.push(".git");
-    opts.path.push("objects");
+    let opt = Opt::parse_args_default_or_exit();
+    let counts = match opt {
+        Opt::Libgit(Libgit { path, verbose }) => todo!(),
+        Opt::Walk(Walk { mut path, verbose }) => {
+            if verbose {
+                env_logger::init();
+            }
+            path.push(".git");
+            path.push("objects");
 
-    println!("{:?}", count_loose_objects(&opts.path));
+            walk_objects(&path)
+        }
+    };
+    println!("blob   {}", counts.blob);
+    println!("tree   {}", counts.tree);
+    println!("commit {}", counts.commit);
+    println!("tag    {}", counts.tag);
 }
