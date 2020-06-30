@@ -3,7 +3,7 @@ use git2::{ObjectType, Repository};
 use gumdrop::Options;
 use log::{error, info};
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
@@ -56,34 +56,28 @@ fn walk_objects(path: &Path) -> Counts {
                                 }
                             };
 
-                            let mut decoder = ZlibDecoder::new(file);
-                            let mut content = Vec::new();
-                            match decoder.read_to_end(&mut content) {
+                            let mut decoder =
+                                BufReader::with_capacity(1024, ZlibDecoder::new(file));
+                            let mut header = Vec::new();
+                            match decoder.read_until(0, &mut header) {
                                 Ok(_) => {}
                                 Err(e) => {
                                     error!("failed to read object file: {:?}", e);
                                     continue;
                                 }
                             }
-                            let header_end = match content.iter().position(|b| *b == 0) {
-                                Some(n) => n,
-                                None => {
-                                    error!("malformed object: no NUL in the file");
-                                    continue;
-                                }
-                            };
-                            info!("{}", String::from_utf8_lossy(&content[0..header_end]));
+                            info!("{}", String::from_utf8_lossy(&header));
 
-                            if content.starts_with(b"blob") {
+                            if header.starts_with(b"blob") {
                                 blob += 1;
                             }
-                            if content.starts_with(b"tree") {
+                            if header.starts_with(b"tree") {
                                 tree += 1;
                             }
-                            if content.starts_with(b"commit") {
+                            if header.starts_with(b"commit") {
                                 commit += 1;
                             }
-                            if content.starts_with(b"tag") {
+                            if header.starts_with(b"tag") {
                                 tag += 1;
                             }
                         }
